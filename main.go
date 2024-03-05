@@ -6,23 +6,33 @@ import (
 	"log"
 	"net/http"
 	"strings"
+
+	"github.com/Av1d1ty/chirpy/internal/db"
 )
 
 func main() {
+    dbFile, err := db.NewDB("database.json")
+    if err != nil {
+        log.Fatalf("Error opening database: %s", err)
+        return
+    }
+
 	mux := http.NewServeMux()
-	apiCfg := &apiConfig{}
+	apiCfg := &apiConfig{DB: dbFile}
 	fsHandler := http.StripPrefix("/app", http.FileServer(http.Dir(".")))
 	mux.Handle("/app/", apiCfg.middlewareMetricsInc(fsHandler))
 	mux.HandleFunc("GET /api/healthz", healthzHandler)
 	mux.HandleFunc("GET /api/reset", apiCfg.resetHandler)
 	mux.HandleFunc("GET /admin/metrics", apiCfg.metricsHandler)
-	mux.HandleFunc("POST /api/validate_chirp", validateChirpHandler)
+	mux.HandleFunc("GET /api/chirps", apiCfg.getChirpsHandler)
+	mux.HandleFunc("POST /api/chirps", apiCfg.postChirpHandler)
 	corsMux := middlewareCors(mux)
 	log.Fatal(http.ListenAndServe(":8080", corsMux))
 }
 
 type apiConfig struct {
 	fileserverHits int
+    DB *db.DB
 }
 
 func middlewareCors(next http.Handler) http.Handler {
@@ -77,29 +87,47 @@ func middlewareLog(next http.Handler) http.Handler {
 	})
 }
 
-func validateChirpHandler(w http.ResponseWriter, r *http.Request) {
-	type chirp struct {
+func (cfg *apiConfig) getChirpsHandler(w http.ResponseWriter, r *http.Request) {
+    chirps, err := cfg.DB.GetChirps()
+    if err != nil {
+        respondWithError(w, http.StatusInternalServerError,
+            fmt.Sprintf("Error getting chirps: %s", err))
+        return
+    }
+    respJSON, _ := json.Marshal(chirps)
+    w.WriteHeader(200)
+    w.Header().Set("Content-Type", "application/json")
+    w.Write([]byte(respJSON))
+}
+
+func (cfg *apiConfig) postChirpHandler(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
 		Body string `json:"body"`
 	}
 	type response struct {
-		CleanedBody string `json:"cleaned_body"`
-		// Error string `json:"error"`
+		Body string `json:"cleaned_body"`
 	}
-	chirpVal := chirp{}
-	err := json.NewDecoder(r.Body).Decode(&chirpVal)
-	switch {
-	case err != nil:
+	params := parameters{}
+	err := json.NewDecoder(r.Body).Decode(&params)
+    if err != nil {
         respondWithError(w, http.StatusInternalServerError,
-                            fmt.Sprintf("Error decoding parameters: %s", err))
-	case len(chirpVal.Body) > 140:
+                         fmt.Sprintf("Error decoding parameters: %s", err))
+    }
+	if len(params.Body) > 140 {
         respondWithError(w, http.StatusBadRequest, "Chirp is too long")
-	default:
-        resp := response{CleanedBody: censorProfanity(chirpVal.Body)}
-        respJSON, _ := json.Marshal(resp)
-		w.WriteHeader(200)
-        w.Header().Set("Content-Type", "application/json")
-        w.Write([]byte(respJSON))
-	}
+        return
+    }
+    cleanedBody := censorProfanity(params.Body)
+    chirp, err := cfg.DB.CreateChirp(cleanedBody)
+    if err != nil {
+        respondWithError(w, http.StatusInternalServerError,
+                         fmt.Sprintf("Error creating chirp: %s", err))
+        return
+    }
+    respJSON, _ := json.Marshal(chirp)
+    w.WriteHeader(201)
+    w.Header().Set("Content-Type", "application/json")
+    w.Write([]byte(respJSON))
 }
 
 func censorProfanity(body string) string {
