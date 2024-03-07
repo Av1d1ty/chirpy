@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/Av1d1ty/chirpy/internal/db"
@@ -25,6 +26,7 @@ func main() {
 	mux.HandleFunc("GET /api/reset", apiCfg.resetHandler)
 	mux.HandleFunc("GET /admin/metrics", apiCfg.metricsHandler)
 	mux.HandleFunc("GET /api/chirps", apiCfg.getChirpsHandler)
+	mux.HandleFunc("GET /api/chirps/{id}", apiCfg.getChirpHandler)
 	mux.HandleFunc("POST /api/chirps", apiCfg.postChirpHandler)
 	corsMux := middlewareCors(mux)
 	log.Fatal(http.ListenAndServe(":8080", corsMux))
@@ -99,6 +101,30 @@ func (cfg *apiConfig) getChirpsHandler(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
     w.Write([]byte(respJSON))
 }
+
+func (cfg *apiConfig) getChirpHandler(w http.ResponseWriter, r *http.Request) {
+    id, err := strconv.Atoi(r.PathValue("id"))
+    if err != nil {
+        respondWithError(w, http.StatusBadRequest,
+            fmt.Sprintf("Error parsing ID: %s", err))
+        return
+    }
+    chirp, err := cfg.DB.GetChirp(id)
+    if err != nil {
+        respondWithError(w, http.StatusInternalServerError,
+            fmt.Sprintf("Error getting chirp: %s", err))
+        return
+    }
+    if chirp == (db.Chirp{}) {
+        respondWithError(w, http.StatusNotFound, "Chirp not found")
+        return
+    }
+    respJSON, _ := json.Marshal(chirp)
+    w.WriteHeader(200)
+    w.Header().Set("Content-Type", "application/json")
+    w.Write([]byte(respJSON))
+}
+
 
 func (cfg *apiConfig) postChirpHandler(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
