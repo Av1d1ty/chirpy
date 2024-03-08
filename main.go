@@ -28,6 +28,7 @@ func main() {
 	mux.HandleFunc("GET /api/chirps", apiCfg.getChirpsHandler)
 	mux.HandleFunc("GET /api/chirps/{id}", apiCfg.getChirpHandler)
 	mux.HandleFunc("POST /api/chirps", apiCfg.postChirpHandler)
+	mux.HandleFunc("POST /api/users", apiCfg.postUserHandler)
 	corsMux := middlewareCors(mux)
 	log.Fatal(http.ListenAndServe(":8080", corsMux))
 }
@@ -130,9 +131,6 @@ func (cfg *apiConfig) postChirpHandler(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
 		Body string `json:"body"`
 	}
-	type response struct {
-		Body string `json:"cleaned_body"`
-	}
 	params := parameters{}
 	err := json.NewDecoder(r.Body).Decode(&params)
     if err != nil {
@@ -151,6 +149,28 @@ func (cfg *apiConfig) postChirpHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
     respJSON, _ := json.Marshal(chirp)
+    w.WriteHeader(201)
+    w.Header().Set("Content-Type", "application/json")
+    w.Write([]byte(respJSON))
+}
+
+func (cfg *apiConfig) postUserHandler(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Email string `json:"email"`
+	}
+	params := parameters{}
+	err := json.NewDecoder(r.Body).Decode(&params)
+    if err != nil {
+        respondWithError(w, http.StatusInternalServerError,
+                         fmt.Sprintf("Error decoding parameters: %s", err))
+    }
+    user, err := cfg.DB.CreateUser(params.Email)
+    if err != nil {
+        respondWithError(w, http.StatusInternalServerError,
+                         fmt.Sprintf("Error creating chirp: %s", err))
+        return
+    }
+    respJSON, _ := json.Marshal(user)
     w.WriteHeader(201)
     w.Header().Set("Content-Type", "application/json")
     w.Write([]byte(respJSON))

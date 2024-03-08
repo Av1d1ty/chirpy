@@ -13,11 +13,17 @@ type DB struct {
 
 type DBStructure struct {
 	Chirps map[int]Chirp `json:"chirps"`
+    Users map[int]User `json:"users"`
 }
 
 type Chirp struct {
 	Id   int    `json:"id"`
 	Body string `json:"body"`
+}
+
+type User struct {
+	Id   int    `json:"id"`
+	Email string `json:"email"`
 }
 
 // NewDB creates a new database connection
@@ -34,7 +40,6 @@ func (db *DB) CreateChirp(body string) (Chirp, error) {
 	if err != nil {
 		return Chirp{}, err
 	}
-
     id := len(dbStructure.Chirps) + 1
 	chirp := Chirp{Id: id, Body: body}
 	dbStructure.Chirps[id] = chirp
@@ -42,6 +47,21 @@ func (db *DB) CreateChirp(body string) (Chirp, error) {
         return Chirp{}, err
     }
 	return chirp, nil
+}
+
+// CreateUser creates a new user and saves it to disk
+func (db *DB) CreateUser(email string) (User, error) {
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return User{}, err
+	}
+    id := len(dbStructure.Users) + 1
+    user := User{Id: id, Email: email}
+	dbStructure.Users[id] = user
+    if err := db.writeDB(dbStructure); err != nil {
+        return User{}, err
+    }
+	return user, nil
 }
 
 // GetChirps returns all chirps in the database
@@ -70,7 +90,8 @@ func (db *DB) GetChirp(id int) (Chirp, error) {
 // ensureDB creates a new database file if it doesn't exist
 func (db *DB) ensureDB() error {
 	if _, err := os.Stat(db.path); os.IsNotExist(err) {
-		if err := db.writeDB(DBStructure{Chirps: map[int]Chirp{}}); err != nil {
+        emptyDB := DBStructure{Chirps: map[int]Chirp{}, Users: map[int]User{}}
+		if err := db.writeDB(emptyDB); err != nil {
 			return err
 		}
 	}
