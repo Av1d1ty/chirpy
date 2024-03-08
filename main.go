@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -12,6 +14,12 @@ import (
 )
 
 func main() {
+    dbg := flag.Bool("debug", false, "Enable debug mode")
+    flag.Parse()
+    if *dbg {
+        log.Println("Debug mode enabled")
+        os.Remove("database.json")
+    }
     dbFile, err := db.NewDB("database.json")
     if err != nil {
         log.Fatalf("Error opening database: %s", err)
