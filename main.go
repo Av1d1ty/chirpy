@@ -7,9 +7,12 @@ import (
 	"os"
 
 	"github.com/Av1d1ty/chirpy/internal/db"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	godotenv.Load()
+	jwtSecret := os.Getenv("JWT_SECRET")
 	dbg := flag.Bool("debug", false, "Enable debug mode")
 	flag.Parse()
 	if *dbg {
@@ -23,7 +26,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	apiCfg := &apiConfig{DB: dbFile}
+	apiCfg := &apiConfig{DB: dbFile, jwtSecret: jwtSecret}
 	fsHandler := http.StripPrefix("/app", http.FileServer(http.Dir(".")))
 
 	mux.Handle("/app/", apiCfg.middlewareMetricsInc(fsHandler))
@@ -36,8 +39,9 @@ func main() {
 	mux.HandleFunc("GET /api/chirps/{id}", apiCfg.getChirpHandler)
 	mux.HandleFunc("POST /api/chirps", apiCfg.postChirpHandler)
 
+	mux.HandleFunc("PUT /api/users", apiCfg.putUserHandler)
 	mux.HandleFunc("POST /api/users", apiCfg.postUserHandler)
-	mux.HandleFunc("POST /api/login", apiCfg.postloginHandler)
+	mux.HandleFunc("POST /api/login", apiCfg.postLoginHandler)
 
 	corsMux := middlewareCors(mux)
 	log.Fatal(http.ListenAndServe(":8080", corsMux))
@@ -46,4 +50,5 @@ func main() {
 type apiConfig struct {
 	fileserverHits int
 	DB             *db.DB
+	jwtSecret      string
 }

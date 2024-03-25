@@ -2,37 +2,32 @@ package db
 
 import (
 	"fmt"
-
-	"golang.org/x/crypto/bcrypt"
 )
 
-
 type User struct {
-	Id       int    `json:"id"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Id             int    `json:"id"`
+	Email          string `json:"email"`
+	HashedPassword string `json:"hashed_password"`
 }
 
 // CreateUser creates a new user and saves it to disk
-func (db *DB) CreateUser(email string, password string) (User, error) {
-	if email == "" || password == "" {
-		return User{}, fmt.Errorf("Email and password cannot be empty")
+func (db *DB) CreateUser(email, hashedPassword string) (User, error) {
+	if _, err := db.GetUserByEmail(email); err == nil {
+		return User{}, ErrAlreadyExists
 	}
-    if _, err := db.GetUserByEmail(email); err == nil {
-        return User{}, fmt.Errorf("User with this email already exists")
-    }
 	dbStructure, err := db.loadDB()
 	if err != nil {
 		return User{}, err
 	}
 	id := len(dbStructure.Users) + 1
-    pwdHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-    if err != nil {
-        return User{}, err
-    }
-	user := User{Id: id, Email: email, Password: string(pwdHash)}
+	user := User{
+		Id:             id,
+		Email:          email,
+		HashedPassword: hashedPassword,
+	}
 	dbStructure.Users[id] = user
-	if err := db.writeDB(dbStructure); err != nil {
+	err = db.writeDB(dbStructure)
+	if err != nil {
 		return User{}, err
 	}
 	return user, nil
@@ -58,10 +53,23 @@ func (db *DB) GetUserByEmail(email string) (User, error) {
 	if err != nil {
 		return User{}, err
 	}
-    for _, usr := range dbStructure.Users {
-        if usr.Email == email {
-            return usr, nil
-        }
+	for _, usr := range dbStructure.Users {
+		if usr.Email == email {
+			return usr, nil
+		}
+	}
+	return User{}, fmt.Errorf("User not found")
+}
+
+func (db *DB) UpdateUser(user User) error {
+    dbStructure, err := db.loadDB()
+    if err != nil {
+        return err
     }
-    return User{}, fmt.Errorf("User not found")
+    _, ok := dbStructure.Users[user.Id]
+    if !ok {
+        return ErrNotExist
+    }
+    dbStructure.Users[user.Id] = user
+    return db.writeDB(dbStructure)
 }
